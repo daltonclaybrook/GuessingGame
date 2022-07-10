@@ -8,7 +8,10 @@ contract GuessingGame {
     GuessToken public immutable token;
 
     /// @notice The discrete states of the contract
-    enum GameState { WaitingForQuestion, AnsweringQuestion }
+    enum GameState {
+        WaitingForQuestion,
+        AnsweringQuestion
+    }
 
     /// @notice The current question and answer
     struct Question {
@@ -38,15 +41,26 @@ contract GuessingGame {
     /// @notice The current question, if one is active
     Question public currentQuestion;
 
-    /// @notice The address of the next person to ask a question
-    address public nextAsker;
-
     /// @notice The period of time between when clues can be submitted.
     uint256 public clueInterval;
 
     /// @notice The period of time after the final clue is eligible to be
     /// submitted where the question can be "expired" for a small award.
     uint256 public expirationIntervalAfterFinalClue;
+
+    // MARK: - Next asker info
+
+    /// @notice After answering a question correctly, the answerer has the exclusive privilege of
+    /// submitting the next question for a short period of time. If they don't submit a new question
+    /// before that time elapses, anyone may submit the next question.
+    address public nextAsker;
+
+    /// @notice The timestamp after which anyone can submit the next question, not just the `nextAsker`.
+    uint256 public nextAskerTimeoutDate;
+
+    /// @notice The time interval after a question is answered where the answerer has the privilege of
+    /// asking the next question.
+    uint256 public nextAskerTimeoutInterval;
 
     // MARK: - Awards
 
@@ -72,12 +86,21 @@ contract GuessingGame {
     /// clues can be submitted.
     /// @param _expirationIntervalAfterFinalClue The period of time after the final clue is
     /// eligible to be submitted where the question can be "expired" for a small award.
-    constructor(address _commissioner, address _initialAsker, uint256 _clueInterval, uint256 _expirationIntervalAfterFinalClue) {
+    /// @param _nextAskerTimeoutInterval The time interval after a question is answered where
+    /// the answerer has the privilege of asking the next question.
+    constructor(
+        address _commissioner,
+        address _initialAsker,
+        uint256 _clueInterval,
+        uint256 _expirationIntervalAfterFinalClue,
+        uint256 _nextAskerTimeoutInterval
+    ) {
         token = new GuessToken(this);
         commissioner = _commissioner;
         clueInterval = _clueInterval;
         nextAsker = _initialAsker;
         expirationIntervalAfterFinalClue = _expirationIntervalAfterFinalClue;
+        nextAskerTimeoutInterval = _nextAskerTimeoutInterval;
     }
 
     // MARK: - General/guessing functions
@@ -113,8 +136,8 @@ contract GuessingGame {
 
     /// @notice Submit the answer to the question and receive the prize.
     /// @dev You should not call this function with an incorrect answer. Doing so will cause
-    /// the function to revert and you will lose gas. You can check if an answer is correct 
-    /// by called `checkAnswer`.
+    /// the function to revert and you will lose gas. You can check if an answer is correct
+    /// by calling `checkAnswer`.
     function submitAnswer(string calldata _answer) external anyoneButAsker {
         require(checkAnswer(_answer), "The answer is incorrect");
 
@@ -131,6 +154,7 @@ contract GuessingGame {
         require(isCurrentQuestionExpired(), "The question is not expired");
 
         nextAsker = msg.sender;
+        nextAskerTimeoutDate = block.timestamp + nextAskerTimeoutInterval;
         gameState = GameState.WaitingForQuestion;
         token.mint(msg.sender, expireQuestionAward);
 
@@ -141,7 +165,9 @@ contract GuessingGame {
     // MARK: - Asker functions
 
     /// @notice Submit the next question
-    function submitQuestion(string calldata _prompt, bytes32 _answerHash) external onlyNextAsker {
+    /// @dev Usually, the `nextAsker` will submit the next question, but if the `nextAskerTimeoutDate`
+    /// has passed without them submitting, anyone may submit a question.
+    function submitQuestion(string calldata _prompt, bytes32 _answerHash) external onlyEligibleSubmitter {
         require(gameState == GameState.WaitingForQuestion, "Can only call when waiting for question");
 
         currentQuestion.asker = msg.sender;
@@ -152,7 +178,6 @@ contract GuessingGame {
 
         token.mint(msg.sender, submitQuestionAward);
         emit SubmitQuestion(msg.sender, _prompt);
-        delete nextAsker;
     }
 
     /// @notice Returns true if the asker is eligible to submit a new clue
@@ -183,7 +208,10 @@ contract GuessingGame {
         clueInterval = _newInterval;
     }
 
-    function updateExpirationIntervalAfterFinalClue(uint256 _expirationIntervalAfterFinalClue) external onlyCommissioner {
+    function updateExpirationIntervalAfterFinalClue(uint256 _expirationIntervalAfterFinalClue)
+        external
+        onlyCommissioner
+    {
         expirationIntervalAfterFinalClue = _expirationIntervalAfterFinalClue;
     }
 
@@ -192,25 +220,30 @@ contract GuessingGame {
         nextAsker = _nextAsker;
     }
 
+    function updateNextAskerTimeoutInterval(uint256 _nextAskerTimeoutInterval) external onlyCommissioner {
+        nextAskerTimeoutInterval = _nextAskerTimeoutInterval;
+    }
+
     // MARK: - Modifiers
 
-    modifier onlyCommissioner {
+    modifier onlyCommissioner() {
         require(msg.sender == commissioner, "Only the commissioner can call this function");
         _;
     }
 
-    modifier onlyAsker {
+    modifier onlyAsker() {
         require(msg.sender == currentQuestion.asker, "Only the asker can call this function");
         _;
     }
 
-    modifier onlyNextAsker {
-        require(msg.sender == nextAsker, "Only the next asker can call this function");
+    modifier anyoneButAsker() {
+        require(msg.sender != currentQuestion.asker, "The asker cannot call this function");
         _;
     }
 
-    modifier anyoneButAsker {
-        require(msg.sender != currentQuestion.asker, "The asker cannot call this function");
+    /// @notice Only someone who is eligible to submit a question at this time
+    modifier onlyEligibleSubmitter() {
+        require(msg.sender == nextAsker || block.timestamp >= nextAskerTimeoutDate, "Not eligible to submit question");
         _;
     }
 }
