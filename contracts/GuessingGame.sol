@@ -8,7 +8,7 @@ contract GuessingGame {
     GuessToken public immutable token;
 
     /// @notice The discrete states of the contract
-    enum GameState { WaitingForQuestion, Guessing }
+    enum GameState { WaitingForQuestion, AnsweringQuestion }
 
     /// @notice The current question and answer
     struct Question {
@@ -16,17 +16,17 @@ contract GuessingGame {
         address asker;
         /// @notice The question prompt, e.g. "What U.S. president opened trade relations with China?"
         string prompt;
-        /// @notice An array of up to three clues, e.g. "Made Elvis Presley a federal agent."
-        string[3] clues;
-        /// @notice The number of clues already submitted.
-        /// @dev This field exists for performance reasons so we don't have to iterate `clues`.
-        uint8 cluesSubmitted;
         /// @notice The Keccak-256 hash of the answer.
         /// @dev The contract does not store the answer in plain text because it would be easy to
         /// recover and cheat.
         bytes32 answerHash;
         /// The unix timestamp when the question was submitted
         uint256 timeSubmitted;
+        /// @notice An array of up to three clues, e.g. "Made Elvis Presley a federal agent."
+        string[3] clues;
+        /// @notice The number of clues already submitted.
+        /// @dev This field exists for performance reasons so we don't have to iterate `clues`.
+        uint8 cluesSubmitted;
     }
 
     /// @notice An account that has special privileges
@@ -43,6 +43,12 @@ contract GuessingGame {
 
     /// @notice The period of time between when clues can be submitted.
     uint256 public clueInterval;
+
+    // MARK: - Awards
+
+    uint256 public constant submitClueAward = 100 * 10**18;
+    uint256 public constant submitQuestionAward = 1000 * 10**18;
+    uint256 public constant submitAnswerAward = 10000 * 10**18;
 
     // MARK: - Events
 
@@ -67,9 +73,8 @@ contract GuessingGame {
     // MARK: - General/guessing functions
 
     /// @notice Helper function for checking whether the current question is active.
-    /// @dev The question is considered active if its `timeSubmitted` property != 0.
     function isCurrentQuestionActive() public view returns (bool) {
-        return currentQuestion.timeSubmitted == 0;
+        return gameState == GameState.AnsweringQuestion;
     }
 
     /// @notice Returns the clue for the provide index, if it exists
@@ -92,12 +97,29 @@ contract GuessingGame {
         require(checkAnswer(_answer), "The answer is incorrect");
 
         nextAsker = msg.sender;
+        gameState = GameState.WaitingForQuestion;
+        token.mint(msg.sender, submitAnswerAward);
+
         emit SubmitAnswer(msg.sender, currentQuestion.asker, _answer, currentQuestion.prompt);
         delete currentQuestion;
-        // todo: pay winner
     }
 
     // MARK: - Asker functions
+
+    /// @notice Submit the next question
+    function submitQuestion(string calldata _prompt, bytes32 _answerHash) external onlyNextAsker {
+        require(gameState == GameState.WaitingForQuestion, "Can only call when waiting for question");
+
+        currentQuestion.asker = msg.sender;
+        currentQuestion.prompt = _prompt;
+        currentQuestion.answerHash = _answerHash;
+        currentQuestion.timeSubmitted = block.timestamp;
+        gameState = GameState.AnsweringQuestion;
+
+        token.mint(msg.sender, submitQuestionAward);
+        emit SubmitQuestion(msg.sender, _prompt);
+        delete nextAsker;
+    }
 
     /// @notice Returns true if the asker is eligible to submit a new clue
     function canSubmitNewClue() public view returns (bool) {
@@ -117,8 +139,8 @@ contract GuessingGame {
         require(canSubmitNewClue(), "No available clues unlocked");
         currentQuestion.clues[currentQuestion.cluesSubmitted] = _newClue;
         currentQuestion.cluesSubmitted += 1;
+        token.mint(msg.sender, submitClueAward);
         emit SubmitClue(currentQuestion.asker, currentQuestion.prompt, _newClue);
-        // todo: pay them for submitting a clue to incentivize it?
     }
 
     // MARK: - Commissioner functions
@@ -136,6 +158,11 @@ contract GuessingGame {
 
     modifier onlyAsker {
         require(msg.sender == currentQuestion.asker, "Only the asker can call this function");
+        _;
+    }
+
+    modifier onlyNextAsker {
+        require(msg.sender == nextAsker, "Only the next asker can call this function");
         _;
     }
 
