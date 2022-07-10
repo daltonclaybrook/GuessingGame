@@ -7,6 +7,9 @@ contract GuessingGame {
     /// @notice The associated token contract address
     GuessToken public immutable token;
 
+    /// @notice The discrete states of the contract
+    enum GameState { WaitingForQuestion, Guessing }
+
     /// @notice The current question and answer
     struct Question {
         /// @notice the address of the user who submitted the question
@@ -29,8 +32,14 @@ contract GuessingGame {
     /// @notice An account that has special privileges
     address public commissioner;
 
+    /// @notice The current state of the game
+    GameState gameState = GameState.WaitingForQuestion;
+
     /// @notice The current question, if one is active
     Question public currentQuestion;
+
+    /// @notice The address of the next person to ask a question
+    address public nextAsker;
 
     /// @notice The period of time between when clues can be submitted.
     uint256 public clueInterval;
@@ -44,15 +53,28 @@ contract GuessingGame {
     /// @notice An answer was submitted and accepted for the current question
     event SubmitAnswer(address indexed answerer, address indexed asker, string answer, string prompt);
 
-    constructor(address _commissioner) {
-        commissioner = _commissioner;
+    /// @param _commissioner The address of the game commissioner who has special privileges
+    /// @param _clueInterval The initial clue interval, i.e. the period of time between when
+    /// @param _asker The address of the initial asker
+    /// clues can be submitted.
+    constructor(address _commissioner, uint256 _clueInterval, address _asker) {
         token = new GuessToken(this);
+        commissioner = _commissioner;
+        clueInterval = _clueInterval;
+        nextAsker = _asker;
     }
+
+    // MARK: - General/guessing functions
 
     /// @notice Helper function for checking whether the current question is active.
     /// @dev The question is considered active if its `timeSubmitted` property != 0.
     function isCurrentQuestionActive() public view returns (bool) {
         return currentQuestion.timeSubmitted == 0;
+    }
+
+    /// @notice Returns the clue for the provide index, if it exists
+    function getClue(uint8 index) public view returns (string memory) {
+        return currentQuestion.clues[index];
     }
 
     /// @notice Checks whether the provided answer is correct
@@ -68,13 +90,11 @@ contract GuessingGame {
     /// by called `checkAnswer`.
     function submitAnswer(string calldata _answer) external notAsker {
         require(checkAnswer(_answer), "The answer is incorrect");
-        // todo: pay winner, delete question, assign caller as next asker
-    }
 
-    // MARK: - Commissioner functions
-
-    function updateClueInterval(uint256 _newInterval) external onlyCommissioner {
-        clueInterval = _newInterval;
+        nextAsker = msg.sender;
+        emit SubmitAnswer(msg.sender, currentQuestion.asker, _answer, currentQuestion.prompt);
+        delete currentQuestion;
+        // todo: pay winner
     }
 
     // MARK: - Asker functions
@@ -98,6 +118,13 @@ contract GuessingGame {
         currentQuestion.clues[currentQuestion.cluesSubmitted] = _newClue;
         currentQuestion.cluesSubmitted += 1;
         emit SubmitClue(currentQuestion.asker, currentQuestion.prompt, _newClue);
+        // todo: pay them for submitting a clue to incentivize it?
+    }
+
+    // MARK: - Commissioner functions
+
+    function updateClueInterval(uint256 _newInterval) external onlyCommissioner {
+        clueInterval = _newInterval;
     }
 
     // MARK: - Modifiers

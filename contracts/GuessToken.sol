@@ -31,7 +31,7 @@ contract GuessToken is IERC20 {
     /// @dev owner => spender => allowance
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    // ERC-20 requirements
+    // MARK: - ERC-20 requirements
 
     constructor(GuessingGame _gameContract) {
         gameContract = _gameContract;
@@ -65,7 +65,17 @@ contract GuessToken is IERC20 {
         return true;
     }
 
-    // Private helpers
+    // MARK: - Game contract functions
+
+    /// @notice The game contract can mint tokens for various reasons like the winner's
+    /// prize, or incentives for adding clues.
+    function mint(address account, uint256 amount) external onlyGameContract {
+        totalSupply += amount;
+        _balances[account] += amount;
+        emit Transfer(address(0), account, amount);
+    }
+
+    // MARK: - Private helpers
 
     function _transfer(address from, address to, uint256 amount) private {
         uint256 fromBalance = _balances[from];
@@ -78,5 +88,12 @@ contract GuessToken is IERC20 {
     function _approve(address owner, address spender, uint256 amount) private {
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
+    }
+
+    // Modifiers
+
+    modifier onlyGameContract {
+        require(msg.sender == address(gameContract), "This function can only be called by the game contract");
+        _;
     }
 }
