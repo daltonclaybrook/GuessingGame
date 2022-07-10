@@ -44,11 +44,16 @@ contract GuessingGame {
     /// @notice The period of time between when clues can be submitted.
     uint256 public clueInterval;
 
+    /// @notice The period of time after the final clue is eligible to be
+    /// submitted where the question can be "expired" for a small award.
+    uint256 public expirationIntervalAfterFinalClue;
+
     // MARK: - Awards
 
-    uint256 public constant submitClueAward = 100 * 10**18;
     uint256 public constant submitQuestionAward = 1000 * 10**18;
+    uint256 public constant submitClueAward = 100 * 10**18;
     uint256 public constant submitAnswerAward = 10000 * 10**18;
+    uint256 public constant expireQuestionAward = 100 * 10**18;
 
     // MARK: - Events
 
@@ -58,16 +63,21 @@ contract GuessingGame {
     event SubmitClue(address indexed asker, string prompt, string clue);
     /// @notice An answer was submitted and accepted for the current question
     event SubmitAnswer(address indexed answerer, address indexed asker, string answer, string prompt);
+    /// @notice The question was expired
+    event ExpireQuestion(address indexed expirer, address indexed asker, string prompt);
 
     /// @param _commissioner The address of the game commissioner who has special privileges
+    /// @param _initialAsker The address of the initial asker
     /// @param _clueInterval The initial clue interval, i.e. the period of time between when
-    /// @param _asker The address of the initial asker
     /// clues can be submitted.
-    constructor(address _commissioner, uint256 _clueInterval, address _asker) {
+    /// @param _expirationIntervalAfterFinalClue The period of time after the final clue is
+    /// eligible to be submitted where the question can be "expired" for a small award.
+    constructor(address _commissioner, address _initialAsker, uint256 _clueInterval, uint256 _expirationIntervalAfterFinalClue) {
         token = new GuessToken(this);
         commissioner = _commissioner;
         clueInterval = _clueInterval;
-        nextAsker = _asker;
+        nextAsker = _initialAsker;
+        expirationIntervalAfterFinalClue = _expirationIntervalAfterFinalClue;
     }
 
     // MARK: - General/guessing functions
@@ -75,6 +85,18 @@ contract GuessingGame {
     /// @notice Helper function for checking whether the current question is active.
     function isCurrentQuestionActive() public view returns (bool) {
         return gameState == GameState.AnsweringQuestion;
+    }
+
+    /// @notice Returns true if the current question has expired without receiving
+    /// an answer. If so, anyone may call `expireQuestion` to receive a small award
+    /// and become the next asker.
+    function isCurrentQuestionExpired() public view returns (bool) {
+        if (isCurrentQuestionActive() == false) {
+            // If there is no current active question, this function returns false.
+            return false;
+        }
+        uint256 expiration = currentQuestion.timeSubmitted + (clueInterval * 3) + expirationIntervalAfterFinalClue;
+        return block.timestamp >= expiration;
     }
 
     /// @notice Returns the clue for the provide index, if it exists
@@ -93,7 +115,7 @@ contract GuessingGame {
     /// @dev You should not call this function with an incorrect answer. Doing so will cause
     /// the function to revert and you will lose gas. You can check if an answer is correct 
     /// by called `checkAnswer`.
-    function submitAnswer(string calldata _answer) external notAsker {
+    function submitAnswer(string calldata _answer) external anyoneButAsker {
         require(checkAnswer(_answer), "The answer is incorrect");
 
         nextAsker = msg.sender;
@@ -101,6 +123,18 @@ contract GuessingGame {
         token.mint(msg.sender, submitAnswerAward);
 
         emit SubmitAnswer(msg.sender, currentQuestion.asker, _answer, currentQuestion.prompt);
+        delete currentQuestion;
+    }
+
+    /// @notice Expire the question if it is eligible, and queue up next asker
+    function expireQuestion() external anyoneButAsker {
+        require(isCurrentQuestionExpired(), "The question is not expired");
+
+        nextAsker = msg.sender;
+        gameState = GameState.WaitingForQuestion;
+        token.mint(msg.sender, expireQuestionAward);
+
+        emit ExpireQuestion(msg.sender, currentQuestion.asker, currentQuestion.prompt);
         delete currentQuestion;
     }
 
@@ -149,6 +183,15 @@ contract GuessingGame {
         clueInterval = _newInterval;
     }
 
+    function updateExpirationIntervalAfterFinalClue(uint256 _expirationIntervalAfterFinalClue) external onlyCommissioner {
+        expirationIntervalAfterFinalClue = _expirationIntervalAfterFinalClue;
+    }
+
+    function updateNextAsker(address _nextAsker) external onlyCommissioner {
+        require(gameState == GameState.WaitingForQuestion, "Can only update asker if waiting for question");
+        nextAsker = _nextAsker;
+    }
+
     // MARK: - Modifiers
 
     modifier onlyCommissioner {
@@ -166,7 +209,7 @@ contract GuessingGame {
         _;
     }
 
-    modifier notAsker {
+    modifier anyoneButAsker {
         require(msg.sender != currentQuestion.asker, "The asker cannot call this function");
         _;
     }
