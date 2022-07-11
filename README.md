@@ -11,3 +11,15 @@ GAS_REPORT=true npx hardhat test
 npx hardhat node
 npx hardhat run scripts/deploy.ts
 ```
+
+## Deployment
+
+```shell
+npx hardhat run --network <network> scripts/deploy.ts
+```
+
+## Verify
+
+```shell
+npx hardhat verify --network <network> --constructor-args scripts/deploy-args.ts <contract address>
+```
