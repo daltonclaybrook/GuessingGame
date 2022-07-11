@@ -21,5 +21,9 @@ npx hardhat run --network <network> scripts/deploy.ts
 ## Verify
 
 ```shell
-npx hardhat verify --network <network> --constructor-args scripts/deploy-args.ts <contract address>
+# Verify game contract
+npx hardhat verify --network <network> --constructor-args scripts/deploy-args.ts <game address>
+
+# Verify token contract
+npx hardhat verify --network <network> <token address> <game address>
 ```
