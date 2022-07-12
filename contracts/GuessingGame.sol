@@ -122,6 +122,11 @@ contract GuessingGame {
         return block.timestamp >= expiration;
     }
 
+    /// @notice Returns the current question's asker
+    function currentQuestionAsker() public view returns (address) {
+        return currentQuestion.asker;
+    }
+
     /// @notice Returns the prompt for the current question
     function currentQuestionPrompt() public view returns (string memory) {
         return currentQuestion.prompt;
@@ -135,7 +140,7 @@ contract GuessingGame {
     /// @notice Checks whether the provided answer is correct
     function checkAnswer(string calldata _answer) public view returns (bool) {
         require(isCurrentQuestionActive(), "No current question active");
-        bytes32 hashedGuess = keccak256(abi.encode(_answer));
+        bytes32 hashedGuess = keccak256(abi.encodePacked(_answer));
         return currentQuestion.answerHash == hashedGuess;
     }
 
