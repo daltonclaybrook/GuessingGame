@@ -1,18 +1,10 @@
-# Sample Hardhat Project
+# Guessing Game
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
-
-Try running some of the following tasks:
-
-```shell
-npx hardhat help
-npx hardhat test
-GAS_REPORT=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
-```
+This project demonstrates an implementation of a guessing game on the Ethereum blockchain. It contains a `GuessingGame` contract with the core functionality of the game, and a `GuessToken` ERC-20 token, which serves as the prize token for the game.
 
 ## Deployment
+
+Run the following script to deploy the contracts to the Rinkeby test network.
 
 ```shell
 yarn deploy-game
@@ -21,6 +13,6 @@ yarn deploy-game
 ## Verify
 
 ```shell
-# Verify game and token contracts
+# Verify source code on Etherscan for the game and token contracts
 npx hardhat verify-game --network rinkeby --contract <game address>
 ```
