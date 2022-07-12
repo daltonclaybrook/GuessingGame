@@ -122,6 +122,11 @@ contract GuessingGame {
         return block.timestamp >= expiration;
     }
 
+    /// @notice Returns the prompt for the current question
+    function currentQuestionPrompt() public view returns (string memory) {
+        return currentQuestion.prompt;
+    }
+
     /// @notice Returns the clue for the provide index, if it exists
     function getClue(uint8 index) public view returns (string memory) {
         return currentQuestion.clues[index];
