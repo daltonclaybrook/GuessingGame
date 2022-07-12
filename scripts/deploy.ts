@@ -22,7 +22,7 @@ const deployGame = async () => {
 
   await guessingGame.deployed();
   console.log(
-    `GuessingGame contract deployed to network ${network.name} at ${guessingGame.address}`
+    `GuessingGame contract deployed to network: ${network.name}, address: ${guessingGame.address}, tx hash: ${guessingGame.deployTransaction.hash}`
   );
 };
 

@@ -15,15 +15,12 @@ npx hardhat run scripts/deploy.ts
 ## Deployment
 
 ```shell
-npx hardhat run --network <network> scripts/deploy.ts
+yarn deploy-game
 ```
 
 ## Verify
 
 ```shell
-# Verify game contract
-npx hardhat verify --network <network> --constructor-args scripts/deploy-args.ts <game address>
-
-# Verify token contract
-npx hardhat verify --network <network> <token address> <game address>
+# Verify game and token contracts
+npx hardhat verify-game --network rinkeby --contract <game address>
 ```

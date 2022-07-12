@@ -152,6 +152,7 @@ contract GuessingGame {
         require(checkAnswer(_answer), "The answer is incorrect");
 
         nextAsker = msg.sender;
+        nextAskerTimeoutDate = block.timestamp + nextAskerTimeoutInterval;
         gameState = GameState.WaitingForQuestion;
         token.mint(msg.sender, submitAnswerAward);
 
